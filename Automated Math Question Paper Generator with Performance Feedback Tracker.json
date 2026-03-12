@@ -1,0 +1,1075 @@
+{
+  "name": "Automated Math Question Paper Generator with Performance Feedback Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "238629c1-65ce-4fa7-94e1-92872966f002",
+      "name": "Daily Question Paper Generation",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -48,
+        -376
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1PSg-zD8UJXD7lK2w6veNka1QBgBzn6gAweuFU1UGrWM",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Questions",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Date",
+              "lookupValue": "={{ $json['Day of month'] }}-{{ $json.Month }}-{{ $json.Year }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d264b7ea-9e47-4aab-9e75-87a536746385",
+      "name": "Read Topics from Spreadsheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        176,
+        -376
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "M6j4rFujaWr7f4mG",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "\n{\n \"questions\": [\n  {\"question\":\"...\",\"answer\":\"...\"},\n  {\"question\":\"...\",\"answer\":\"...\"},\n  {\"question\":\"...\",\"answer\":\"...\"},\n  {\"question\":\"...\",\"answer\":\"...\"},\n  {\"question\":\"...\",\"answer\":\"...\"}\n ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        536,
+        -256
+      ],
+      "id": "504b8144-8f1e-4daa-8c08-19a5bb1492f9",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "158d1c54-db0e-486d-8d47-bcf3ce231e96",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -48,
+        48
+      ],
+      "id": "18bcd6a2-4f16-4ec3-94ba-b1bf45e5fec0",
+      "name": "Webhook",
+      "webhookId": "158d1c54-db0e-486d-8d47-bcf3ce231e96",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate {{ $json.num1 }} math questions from {{$json.Syllabus}} {{$json.Topic1}}.\n\nReturn ONLY valid JSON in this format:\n\n{\n \"questions\": [\n  {\"question\":\"...\",\"answer\":\"...\"},\n  {\"question\":\"...\",\"answer\":\"...\"},\n  {\"question\":\"...\",\"answer\":\"...\"},\n  {\"question\":\"...\",\"answer\":\"...\"},\n  {\"question\":\"...\",\"answer\":\"...\"}\n ]\n}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a helpful assistant who generates maths questions for school children. "
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        400,
+        -480
+      ],
+      "id": "07aad8ea-3572-4294-9bd5-233f4d5ae337",
+      "name": "Generate Maths Questions and Answers",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json.body;\n\nlet total = 0;\nlet results = {};\nlet i = 1;\n\nwhile (data[`Reference${i}`] !== undefined) {\n  const studentAnswer = String(data[`Answer${i}`] || '');\n  const correctAnswer = String(data[`Reference${i}`] || '');\n  const answerid = String(data[`idnum${i}`] || '');\n\n  // Extract all numbers from both answers\n  const studentNums = studentAnswer.match(/\\d+(\\.\\d+)?/g)?.map(Number).sort((a,b) => a-b) || [];\n  const correctNums = correctAnswer.match(/\\d+(\\.\\d+)?/g)?.map(Number).sort((a,b) => a-b) || [];\n  \n\n  // Check if both arrays contain the same numbers\n  const isCorrect = \n    studentNums.length > 0 &&\n    studentNums.length === correctNums.length &&\n    studentNums.every((n, idx) => n === correctNums[idx]);\n\n  if (isCorrect) total++;\n\n  results[`Question${i}`] = {\n    studentAnswer,\n    correctAnswer,\n    mark: isCorrect ? 1 : 0,\n    id: answerid\n  };\n\n  i++;\n}\n\nreturn [{ json: { total, outOf: i - 1, results } }];"
+      },
+      "id": "b8f35b46-163b-4aa0-9a6f-adda3707425b",
+      "name": "Assess Form Answers ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        48
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "sendTo": "ramyarrr987@gmail.com",
+        "subject": "Test Scores",
+        "message": "=Well Done!, you scored  {{ $json.total }}  out of {{ $json.outOf }}. Keep up the good effort!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        144
+      ],
+      "id": "b8dd3f6b-7155-44bb-83bf-b957ee4e0b8f",
+      "name": "Send Evaluation",
+      "webhookId": "6b715d39-aaba-486e-bcc7-7bc24ffd5cfe",
+      "alwaysOutputData": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "SHjI1XzYxIdNsQOt",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        408,
+        -256
+      ],
+      "id": "63f48e15-dee7-40c5-9709-f3d1f1867b90",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "NTaKjnMaue8yZPdp",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json.output;\nconst parsed = typeof response === \"string\" ? JSON.parse(response) : response;\n\nlet questions = parsed.questions || parsed;\n\nif (!Array.isArray(questions)) {\n  questions = [questions];\n}\n\nreturn questions.map((q, index) => ({\n  json: {\n    Number: index + 1,\n    question: q.question || q.Question,\n    answer: q.answer || q.Reference\n  }\n}));"
+      },
+      "id": "9461b1ee-a27b-4ca7-875b-f63840060c32",
+      "name": "Split QnA as different items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        -376
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7cdb61f9-68ef-4254-a12f-dfddddc4a0a0",
+              "name": "idnum",
+              "value": "={{$('Read Topics from Spreadsheet').item.json.Date}}-{{ $json.Number }}",
+              "type": "string"
+            },
+            {
+              "id": "b09a7109-3182-410b-8835-dd39fafaeb34",
+              "name": "Question",
+              "value": "={{ $json.question }}",
+              "type": "string"
+            },
+            {
+              "id": "52dcc02b-d203-4b0b-84c8-2882d4a8f9d8",
+              "name": "Answer",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "e9df2e9c-9f1c-4712-a675-75dfe2f683c6",
+              "name": "Reference",
+              "value": "={{ $json.answer }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        976,
+        -376
+      ],
+      "id": "436cfe42-f56f-4ac8-99e1-0c41f16c95b2",
+      "name": "Create Fields for Questionnaire"
+    },
+    {
+      "parameters": {
+        "jsCode": "const questions = $input.first().json.data;\n\nlet formHTML = `<form method=\"POST\" action=\"https://ramyarrr987.app.n8n.cloud/webhook/158d1c54-db0e-486d-8d47-bcf3ce231e96\">`;\n\nquestions.forEach((q, i) => {\n  formHTML += `\n  <div>\n    <label>Question ${i+1}: ${q.Question}</label><br>\n    <input type=\"text\" name=\"Answer${i+1}\" placeholder=\"Your answer...\">\n    <input type=\"hidden\" name=\"Reference${i+1}\" value=\"${q.Reference}\">\n    <input type=\"hidden\" name=\"idnum${i+1}\" value=\"${q.idnum}\">\n  </div>\n  <br><br>\n  `;\n});\n\nformHTML += `\n  <button type=\"submit\">Submit</button>\n</form>`;\n\nreturn [{ json: { formHTML } }];"
+      },
+      "id": "65443f69-1abd-4ae5-930c-0b92f30c08ff",
+      "name": "Build Questionnaire Form",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        -280
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Read Topics from Spreadsheet').item.json.Email }}",
+        "subject": "Math Question Paper",
+        "message": "={{ $json.formHTML }}",
+        "options": {
+          "appendAttribution": false,
+          "replyTo": "ramyarrr987@gmail.com"
+        }
+      },
+      "id": "41ed2624-bde6-4e2d-a095-e543d9690580",
+      "name": "Send Questionnaire via Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1648,
+        -280
+      ],
+      "webhookId": "57d88675-c03b-4abe-ad8d-28202f50066a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "SHjI1XzYxIdNsQOt",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1PSg-zD8UJXD7lK2w6veNka1QBgBzn6gAweuFU1UGrWM",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 942029910,
+          "mode": "list",
+          "cachedResultName": "Feedback",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1PSg-zD8UJXD7lK2w6veNka1QBgBzn6gAweuFU1UGrWM/edit#gid=942029910"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "idnum": "={{ $json.idnum }}",
+            "Question": "={{ $json.Question }}",
+            "Correct Answer": "={{ $json.Reference }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "idnum",
+              "displayName": "idnum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Question",
+              "displayName": "Question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Correct Answer",
+              "displayName": "Correct Answer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Given Answer",
+              "displayName": "Given Answer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Feedback",
+              "displayName": "Feedback",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "total",
+              "displayName": "total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "outOf",
+              "displayName": "outOf",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "results",
+              "displayName": "results",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ef755c37-8270-49c4-8552-38ef8e1ab9ab",
+      "name": "Populate Questions",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1200,
+        -472
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "M6j4rFujaWr7f4mG",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1PSg-zD8UJXD7lK2w6veNka1QBgBzn6gAweuFU1UGrWM",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 942029910,
+          "mode": "list",
+          "cachedResultName": "Feedback",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1PSg-zD8UJXD7lK2w6veNka1QBgBzn6gAweuFU1UGrWM/edit#gid=942029910"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Given Answer": "={{ $json.studentAnswer }}",
+            "Feedback": "={{ $json.mark }}",
+            "idnum": "={{ $json.id }}"
+          },
+          "matchingColumns": [
+            "idnum"
+          ],
+          "schema": [
+            {
+              "id": "idnum",
+              "displayName": "idnum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Question",
+              "displayName": "Question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Correct Answer",
+              "displayName": "Correct Answer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Given Answer",
+              "displayName": "Given Answer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Feedback",
+              "displayName": "Feedback",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "total",
+              "displayName": "total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "outOf",
+              "displayName": "outOf",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "results",
+              "displayName": "results",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "101fdc8d-a255-4672-90cf-c1ffefb529ce",
+      "name": "Populate Assessment details",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        624,
+        -48
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "M6j4rFujaWr7f4mG",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        -280
+      ],
+      "id": "ff8a85da-263d-4e1f-998c-8edb58fd0647",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst results = item.results;\n\n// Convert Question1, Question2... object into array\nconst questions = Object.values(results);\n\nreturn questions.map((q, index) => ({\n  json: {\n    id: q.id,\n    studentAnswer: q.studentAnswer,\n    mark: q.mark,\n  }\n}));\n\n"
+      },
+      "id": "890aa388-158b-4526-946e-c5f0417591ae",
+      "name": "Manipulate Assessment Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        -48
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true
+    }
+  ],
+  "pinData": {
+    "Generate Maths Questions and Answers": [
+      {
+        "json": {
+          "output": {
+            "questions": [
+              {
+                "answer": "The numbers are 10 and 5.",
+                "question": "The sum of two numbers is 15. One number is twice the other. What are the two numbers?"
+              },
+              {
+                "answer": "12 chickens and 8 cows.",
+                "question": "A farmer has chickens and cows. He counts 20 heads and 56 legs. How many chickens and cows does he have?"
+              },
+              {
+                "answer": "Length = 8 cm, Width = 4 cm.",
+                "question": "The perimeter of a rectangle is 24 cm. The length is 4 cm more than the width. Find the length and width of the rectangle."
+              },
+              {
+                "answer": "One pen costs $2 and one notebook costs $3.",
+                "question": "John bought 2 pens and 1 notebook for $7. Mary bought 1 pen and 2 notebooks for $8. What is the cost of one pen and one notebook?"
+              },
+              {
+                "answer": "The numbers are 10 and 7.",
+                "question": "A number is 3 more than another number. Their sum is 17. Find the two numbers."
+              }
+            ]
+          }
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ],
+    "Split QnA as different items": [
+      {
+        "json": {
+          "Number": 1,
+          "question": "The sum of two numbers is 15. One number is twice the other. What are the two numbers?",
+          "answer": "The numbers are 10 and 5."
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "Number": 2,
+          "question": "A farmer has chickens and cows. He counts 20 heads and 56 legs. How many chickens and cows does he have?",
+          "answer": "12 chickens and 8 cows."
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "Number": 3,
+          "question": "The perimeter of a rectangle is 24 cm. The length is 4 cm more than the width. Find the length and width of the rectangle.",
+          "answer": "Length = 8 cm, Width = 4 cm."
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "Number": 4,
+          "question": "John bought 2 pens and 1 notebook for $7. Mary bought 1 pen and 2 notebooks for $8. What is the cost of one pen and one notebook?",
+          "answer": "One pen costs $2 and one notebook costs $3."
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "Number": 5,
+          "question": "A number is 3 more than another number. Their sum is 17. Find the two numbers.",
+          "answer": "The numbers are 10 and 7."
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ],
+    "Create Fields for Questionnaire": [
+      {
+        "json": {
+          "idnum": "12-March-2026-1",
+          "Question": "The sum of two numbers is 15. One number is twice the other. What are the two numbers?",
+          "Answer": "",
+          "Reference": "The numbers are 10 and 5."
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "idnum": "12-March-2026-2",
+          "Question": "A farmer has chickens and cows. He counts 20 heads and 56 legs. How many chickens and cows does he have?",
+          "Answer": "",
+          "Reference": "12 chickens and 8 cows."
+        },
+        "pairedItem": {
+          "item": 1
+        }
+      },
+      {
+        "json": {
+          "idnum": "12-March-2026-3",
+          "Question": "The perimeter of a rectangle is 24 cm. The length is 4 cm more than the width. Find the length and width of the rectangle.",
+          "Answer": "",
+          "Reference": "Length = 8 cm, Width = 4 cm."
+        },
+        "pairedItem": {
+          "item": 2
+        }
+      },
+      {
+        "json": {
+          "idnum": "12-March-2026-4",
+          "Question": "John bought 2 pens and 1 notebook for $7. Mary bought 1 pen and 2 notebooks for $8. What is the cost of one pen and one notebook?",
+          "Answer": "",
+          "Reference": "One pen costs $2 and one notebook costs $3."
+        },
+        "pairedItem": {
+          "item": 3
+        }
+      },
+      {
+        "json": {
+          "idnum": "12-March-2026-5",
+          "Question": "A number is 3 more than another number. Their sum is 17. Find the two numbers.",
+          "Answer": "",
+          "Reference": "The numbers are 10 and 7."
+        },
+        "pairedItem": {
+          "item": 4
+        }
+      }
+    ],
+    "Aggregate": [
+      {
+        "json": {
+          "data": [
+            {
+              "idnum": "12-March-2026-1",
+              "Question": "The sum of two numbers is 15. One number is twice the other. What are the two numbers?",
+              "Answer": "",
+              "Reference": "The numbers are 10 and 5."
+            },
+            {
+              "idnum": "12-March-2026-2",
+              "Question": "A farmer has chickens and cows. He counts 20 heads and 56 legs. How many chickens and cows does he have?",
+              "Answer": "",
+              "Reference": "12 chickens and 8 cows."
+            },
+            {
+              "idnum": "12-March-2026-3",
+              "Question": "The perimeter of a rectangle is 24 cm. The length is 4 cm more than the width. Find the length and width of the rectangle.",
+              "Answer": "",
+              "Reference": "Length = 8 cm, Width = 4 cm."
+            },
+            {
+              "idnum": "12-March-2026-4",
+              "Question": "John bought 2 pens and 1 notebook for $7. Mary bought 1 pen and 2 notebooks for $8. What is the cost of one pen and one notebook?",
+              "Answer": "",
+              "Reference": "One pen costs $2 and one notebook costs $3."
+            },
+            {
+              "idnum": "12-March-2026-5",
+              "Question": "A number is 3 more than another number. Their sum is 17. Find the two numbers.",
+              "Answer": "",
+              "Reference": "The numbers are 10 and 7."
+            }
+          ]
+        },
+        "pairedItem": [
+          {
+            "item": 0
+          },
+          {
+            "item": 1
+          },
+          {
+            "item": 2
+          },
+          {
+            "item": 3
+          },
+          {
+            "item": 4
+          }
+        ]
+      }
+    ],
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "ramyarrr987.app.n8n.cloud",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+            "content-length": "403",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "accept-encoding": "gzip, br",
+            "accept-language": "en-NL,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
+            "cache-control": "max-age=0",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "2a02:a45f:f31d:0:6518:ecef:4195:2b81",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "NL",
+            "cf-ray": "9db3971d6baa5671-AMS",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/x-www-form-urlencoded",
+            "origin": "https://mail.google.com",
+            "priority": "u=0, i",
+            "referer": "https://mail.google.com/",
+            "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "document",
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-site": "cross-site",
+            "sec-fetch-user": "?1",
+            "upgrade-insecure-requests": "1",
+            "x-forwarded-for": "2a02:a45f:f31d:0:6518:ecef:4195:2b81, 104.23.170.57",
+            "x-forwarded-host": "ramyarrr987.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-114-8f67bbd4f-qwlwk",
+            "x-is-trusted": "yes",
+            "x-real-ip": "2a02:a45f:f31d:0:6518:ecef:4195:2b81"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "Answer1": "5,10",
+            "Reference1": "The numbers are 10 and 5.",
+            "idnum1": "12-March-2026-1",
+            "Answer2": "2,5",
+            "Reference2": "12 chickens and 8 cows.",
+            "idnum2": "12-March-2026-2",
+            "Answer3": "17,12",
+            "Reference3": "Length = 8 cm, Width = 4 cm.",
+            "idnum3": "12-March-2026-3",
+            "Answer4": "6,10",
+            "Reference4": "One pen costs $2 and one notebook costs $3.",
+            "idnum4": "12-March-2026-4",
+            "Answer5": "20,5",
+            "Reference5": "The numbers are 10 and 7.",
+            "idnum5": "12-March-2026-5"
+          },
+          "webhookUrl": "https://ramyarrr987.app.n8n.cloud/webhook-test/158d1c54-db0e-486d-8d47-bcf3ce231e96",
+          "executionMode": "test"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ],
+    "Assess Form Answers ": [
+      {
+        "json": {
+          "total": 1,
+          "outOf": 5,
+          "results": {
+            "Question1": {
+              "studentAnswer": "5,10",
+              "correctAnswer": "The numbers are 10 and 5.",
+              "mark": 1,
+              "id": "12-March-2026-1"
+            },
+            "Question2": {
+              "studentAnswer": "2,5",
+              "correctAnswer": "12 chickens and 8 cows.",
+              "mark": 0,
+              "id": "12-March-2026-2"
+            },
+            "Question3": {
+              "studentAnswer": "17,12",
+              "correctAnswer": "Length = 8 cm, Width = 4 cm.",
+              "mark": 0,
+              "id": "12-March-2026-3"
+            },
+            "Question4": {
+              "studentAnswer": "6,10",
+              "correctAnswer": "One pen costs $2 and one notebook costs $3.",
+              "mark": 0,
+              "id": "12-March-2026-4"
+            },
+            "Question5": {
+              "studentAnswer": "20,5",
+              "correctAnswer": "The numbers are 10 and 7.",
+              "mark": 0,
+              "id": "12-March-2026-5"
+            }
+          }
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ],
+    "Manipulate Assessment Details": [
+      {
+        "json": {
+          "id": "12-March-2026-1",
+          "studentAnswer": "5,10",
+          "mark": 1
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "id": "12-March-2026-2",
+          "studentAnswer": "2,5",
+          "mark": 0
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "id": "12-March-2026-3",
+          "studentAnswer": "17,12",
+          "mark": 0
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "id": "12-March-2026-4",
+          "studentAnswer": "6,10",
+          "mark": 0
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "id": "12-March-2026-5",
+          "studentAnswer": "20,5",
+          "mark": 0
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Daily Question Paper Generation": {
+      "main": [
+        [
+          {
+            "node": "Read Topics from Spreadsheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Topics from Spreadsheet": {
+      "main": [
+        [
+          {
+            "node": "Generate Maths Questions and Answers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Generate Maths Questions and Answers",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Assess Form Answers ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Maths Questions and Answers": {
+      "main": [
+        [
+          {
+            "node": "Split QnA as different items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Form Answers ": {
+      "main": [
+        [
+          {
+            "node": "Send Evaluation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Manipulate Assessment Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Evaluation": {
+      "main": [
+        []
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Maths Questions and Answers",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split QnA as different items": {
+      "main": [
+        [
+          {
+            "node": "Create Fields for Questionnaire",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Fields for Questionnaire": {
+      "main": [
+        [
+          {
+            "node": "Populate Questions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Questionnaire Form": {
+      "main": [
+        [
+          {
+            "node": "Send Questionnaire via Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Populate Assessment details": {
+      "main": [
+        []
+      ]
+    },
+    "Populate Questions": {
+      "main": [
+        []
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Build Questionnaire Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manipulate Assessment Details": {
+      "main": [
+        [
+          {
+            "node": "Populate Assessment details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "availableInMCP": false
+  },
+  "versionId": "818c2846-41e2-4e37-b3c8-a518812301a7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b797cc0ee0bef83750daf611330728c7e647950dc81b20d3bc77c0cb95797d1a"
+  },
+  "id": "2Nrs6tCLRDVXF0zx",
+  "tags": []
+}
